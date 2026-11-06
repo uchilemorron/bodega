@@ -27,8 +27,8 @@ final class ServicioVentaTest extends TestCase
         self::assertSame(false, ServicioVenta::hayStock(1, 0));
     }
 
-        public function testNoAplicaDescuentoAlSubtotalDe9999(): void
-    {
+    public function testNoAplicaDescuentoAlSubtotalDe9999(): void
+ {
         $items = [['cantidad' => 1, 'precio' => 99.99]];
 
         self::assertEqualsWithDelta(99.99, ServicioVenta::calcularSubtotal($items), 0.001);
