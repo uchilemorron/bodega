@@ -4,3 +4,4 @@
 |-----|--------|-------------|------------------------|
 | P1  | Redacción de D0.md | IA (autorizado por la docente) | Revisado: las reglas R1–R4 se copiaron literalmente de la guía |
 | P2  | Requisitos (requirements.md) | Kiro (Spec) | Aceptado: 5 historias, criterios EARS. Corrección manual: se agregó la cita (R4) en 5.1 y (R1) en 5.3 |
+| P3  | Diseño (design.md) | Kiro (Spec) | Aceptado: 3 capas, 3 tablas, diagrama Mermaid R1–R4. Kiro agregó RepositorioInterface para probar sin BD; se mantiene |
