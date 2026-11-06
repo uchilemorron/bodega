@@ -2,3 +2,5 @@ phpunit.phar
 config/env.php
 config/env_test.php
 .phpunit.result.cache
+bodega_despliegue.zip
+_to_delete/
