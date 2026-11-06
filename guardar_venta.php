@@ -13,60 +13,41 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $mensajeError = 'Esta página solo acepta ventas enviadas desde el formulario.';
 } else {
     try {
-        $cliente = trim((string) ($_POST['cliente'] ?? ''));
-        if ($cliente === '') {
-            throw new DomainException('Ingresa el nombre del cliente.');
-        }
+        $cliente = ServicioVenta::validarCliente((string) ($_POST['cliente'] ?? ''));
 
         $ids = $_POST['productos'] ?? null;
         $cantidadesPost = $_POST['cantidades'] ?? null;
-        if (!is_array($ids) || !is_array($cantidadesPost) || count($ids) !== count($cantidadesPost) || $ids === []) {
+        if (!is_array($ids) || !is_array($cantidadesPost) || count($ids) !== count($cantidadesPost)) {
             throw new DomainException('Agrega al menos un producto y una cantidad válida.');
         }
 
-        $repositorio = new RepositorioMySQL(conectar());
-        $cantidadesPorProducto = [];
+        $itemsEntrada = [];
         foreach ($ids as $indice => $idPost) {
-            $cantidadPost = $cantidadesPost[$indice] ?? null;
-            if (
-                (!is_string($idPost) && !is_int($idPost))
-                || (!is_string($cantidadPost) && !is_int($cantidadPost))
-                || !preg_match('/\A[1-9][0-9]*\z/', (string) $idPost)
-                || !preg_match('/\A[0-9]+\z/', (string) $cantidadPost)
-            ) {
-                throw new DomainException('La cantidad debe ser un entero mayor que cero.');
-            }
-
-            $id = filter_var($idPost, FILTER_VALIDATE_INT);
-            $cantidad = filter_var($cantidadPost, FILTER_VALIDATE_INT);
-            if ($id === false || $id <= 0 || $cantidad === false || !ServicioVenta::validarCantidad($cantidad)) {
-                throw new DomainException('La cantidad debe ser un entero mayor que cero.');
-            }
-
-            if (($cantidadesPorProducto[$id] ?? 0) > PHP_INT_MAX - $cantidad) {
-                throw new DomainException('La cantidad ingresada es demasiado grande.');
-            }
-            $cantidadesPorProducto[$id] = ($cantidadesPorProducto[$id] ?? 0) + $cantidad;
-        }
-
-        $items = [];
-        foreach ($cantidadesPorProducto as $id => $cantidad) {
-            $producto = $repositorio->obtenerProducto((int) $id);
-            if ($producto === null) {
-                throw new DomainException('Uno de los productos seleccionados no está registrado.');
-            }
-            if (!ServicioVenta::hayStock($cantidad, (int) $producto['stock'])) {
-                throw new DomainException(
-                    'La cantidad excede el stock disponible del producto ' . $producto['nombre'] . '.'
-                );
-            }
-
-            $items[] = [
-                'producto_id' => (int) $id,
-                'cantidad' => $cantidad,
-                'precio' => (float) $producto['precio'],
+            $itemsEntrada[] = [
+                'producto_id' => $idPost,
+                'cantidad' => $cantidadesPost[$indice] ?? null,
             ];
         }
+        $items = ServicioVenta::normalizarItems(
+            $itemsEntrada,
+            'La cantidad debe ser un entero mayor que cero.',
+            'La cantidad debe ser un entero mayor que cero.',
+            'Agrega al menos un producto y una cantidad válida.'
+        );
+
+        $repositorio = new RepositorioMySQL(conectar());
+        $productos = [];
+        foreach ($items as $item) {
+            $producto = $repositorio->obtenerProducto($item['producto_id']);
+            if ($producto !== null) {
+                $productos[$item['producto_id']] = $producto;
+            }
+        }
+        $items = ServicioVenta::validarStock(
+            $items,
+            $productos,
+            'Uno de los productos seleccionados no está registrado.'
+        );
 
         $subtotal = ServicioVenta::calcularSubtotal($items);
         $descuento = ServicioVenta::calcularDescuento($subtotal);

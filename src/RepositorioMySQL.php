@@ -32,35 +32,8 @@ class RepositorioMySQL
 
     public function registrarVenta(string $cliente, array $items): int
     {
-        $cliente = trim($cliente);
-        if ($cliente === '') {
-            throw new DomainException('Ingresa el nombre del cliente.');
-        }
-        if ($items === []) {
-            throw new DomainException('Agrega al menos un producto a la venta.');
-        }
-
-        $cantidades = [];
-        foreach ($items as $item) {
-            if (
-                !is_array($item)
-                || !isset($item['producto_id'], $item['cantidad'])
-                || !is_int($item['producto_id'])
-                || !is_int($item['cantidad'])
-                || $item['producto_id'] <= 0
-                || !ServicioVenta::validarCantidad($item['cantidad'])
-            ) {
-                throw new DomainException('El producto o la cantidad ingresada no son válidos.');
-            }
-
-            $id = $item['producto_id'];
-            $cantidad = $item['cantidad'];
-            if (($cantidades[$id] ?? 0) > PHP_INT_MAX - $cantidad) {
-                throw new DomainException('La cantidad ingresada es demasiado grande.');
-            }
-            $cantidades[$id] = ($cantidades[$id] ?? 0) + $cantidad;
-        }
-        ksort($cantidades, SORT_NUMERIC);
+        $cliente = ServicioVenta::validarCliente($cliente);
+        $items = ServicioVenta::normalizarItems($items);
 
         try {
             $this->conexion->beginTransaction();
@@ -69,40 +42,29 @@ class RepositorioMySQL
                 'SELECT id, nombre, precio, stock FROM producto WHERE id = ? FOR UPDATE'
             );
             $productos = [];
-            foreach ($cantidades as $id => $cantidad) {
+            foreach ($items as $item) {
+                $id = $item['producto_id'];
                 $consultaProducto->execute([$id]);
                 $producto = $consultaProducto->fetch();
-                if ($producto === false) {
-                    throw new DomainException('Uno de los productos seleccionados ya no está disponible.');
+                if ($producto !== false) {
+                    $productos[$id] = $producto;
                 }
-                if (!ServicioVenta::hayStock($cantidad, (int) $producto['stock'])) {
-                    throw new DomainException(
-                        'La cantidad excede el stock disponible del producto ' . $producto['nombre'] . '.'
-                    );
-                }
-                $productos[$id] = $producto;
             }
+            $itemsConPrecio = ServicioVenta::validarStock($items, $productos);
 
             $actualizarStock = $this->conexion->prepare(
                 'UPDATE producto SET stock = stock - ? WHERE id = ? AND stock >= ?'
             );
-            foreach ($cantidades as $id => $cantidad) {
+            foreach ($itemsConPrecio as $item) {
+                $id = $item['producto_id'];
+                $cantidad = $item['cantidad'];
                 $actualizarStock->execute([$cantidad, $id, $cantidad]);
-                if ($actualizarStock->rowCount() !== 1) {
-                    throw new DomainException(
-                        'La cantidad excede el stock disponible del producto ' . $productos[$id]['nombre'] . '.'
-                    );
-                }
+                ServicioVenta::validarReduccionStock(
+                    $actualizarStock->rowCount(),
+                    $productos[$id]['nombre']
+                );
             }
 
-            $itemsConPrecio = [];
-            foreach ($cantidades as $id => $cantidad) {
-                $itemsConPrecio[] = [
-                    'producto_id' => $id,
-                    'cantidad' => $cantidad,
-                    'precio' => (float) $productos[$id]['precio'],
-                ];
-            }
             $subtotal = ServicioVenta::calcularSubtotal($itemsConPrecio);
             $descuento = ServicioVenta::calcularDescuento($subtotal);
             $total = ServicioVenta::calcularTotal($subtotal);
@@ -118,7 +80,7 @@ class RepositorioMySQL
                  VALUES (?, ?, ?, ?, ?)'
             );
             foreach ($itemsConPrecio as $item) {
-                $importe = round($item['cantidad'] * $item['precio'], 2);
+                $importe = ServicioVenta::calcularImporte($item['cantidad'], $item['precio']);
                 $insertarDetalle->execute([
                     $ventaId,
                     $item['producto_id'],
