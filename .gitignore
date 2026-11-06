@@ -1,0 +1,3 @@
+phpunit.phar
+config/env.php
+config/env_test.php

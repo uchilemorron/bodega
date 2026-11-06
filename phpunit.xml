@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit colors="true" bootstrap="src/ServicioVenta.php">
+  <testsuites>
+    <testsuite name="unitarias"><directory>tests</directory></testsuite>
+    <testsuite name="integracion"><directory>tests/integracion</directory></testsuite>
+  </testsuites>
+</phpunit>
